@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.vscode
+*.md
+!README.md
+tmp
+log
+data/references.cache
