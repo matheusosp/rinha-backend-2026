@@ -1,0 +1,7 @@
+{
+    "participants": ["Matheus Pereira"],
+    "social": ["https://github.com/matheusosp"],
+    "source-code-repo": "https://github.com/matheusosp/rinha-backend-2026",
+    "stack": ["Ruby", "Puma", "Numo::NArray", "nginx"],
+    "open_to_work": false
+}
