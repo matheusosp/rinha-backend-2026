@@ -2,6 +2,8 @@
 *.rbc
 .idea
 /.config
+/data/
+/Gemfile.lock
 /coverage/
 /InstalledFiles
 /pkg/
