@@ -1,15 +1,16 @@
 services:
-  api1: &api
+  api1:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 8
+      PUMA_THREADS: 4
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
-    networks: [app]
+    networks:
+      - app
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9999/ready || exit 1"]
-      interval: 10s
+      interval: 20s
       timeout: 5s
       retries: 5
       start_period: 40s
@@ -20,7 +21,25 @@ services:
           memory: "150MB"
 
   api2:
-    <<: *api
+    image: ghcr.io/matheusosp/rinha-backend-2026:latest
+    environment:
+      WEB_CONCURRENCY: 0
+      PUMA_THREADS: 4
+      RUBY_YJIT_ENABLE: 1
+      DATA_DIR: /app/data
+    networks:
+      - app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9999/ready || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.45"
+          memory: "150MB"
 
   nginx:
     image: nginx:1.27-alpine
@@ -33,7 +52,8 @@ services:
         condition: service_healthy
     ports:
       - "9999:9999"
-    networks: [app]
+    networks:
+      - app
     deploy:
       resources:
         limits:

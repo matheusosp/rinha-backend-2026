@@ -10,6 +10,10 @@ class Detector
   THRESHOLD = 0.6
   K         = 5
 
+  EPOCH       = Time.at(0).utc.freeze
+  EMPTY_HASH  = {}.freeze
+  EMPTY_ARRAY = [].freeze
+
   def initialize(data_dir:)
     norm = JSON.parse(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
@@ -19,9 +23,7 @@ class Detector
     @max_km              = norm.fetch('max_km').to_f
     @max_tx_count_24h    = norm.fetch('max_tx_count_24h').to_f
     @max_merchant_avg    = norm.fetch('max_merchant_avg_amount').to_f
-
     @mcc_risk = JSON.parse(File.read(File.join(data_dir, 'mcc_risk.json')))
-
     cache_dir = File.join(data_dir, 'cache')
     @index, @labels_int = References.load(
       File.join(data_dir, 'references.json.gz'),
@@ -29,16 +31,15 @@ class Detector
     )
   end
 
-  # request: parsed JSON Hash. Returns [approved (Boolean), fraud_score (Float)].
   def score(req)
     q = build_vector(req)
-
-    # Fast search using HNSW
     indices, _ = @index.knn_query(q, K)
-    frauds = @labels_int[indices].sum
-
-    score = frauds.to_f / K
-    [score < THRESHOLD, score]
+    
+    frauds = 0
+    indices.each { |idx| frauds += @labels_int[idx] }
+    
+    s = frauds.to_f / K
+    [s < THRESHOLD, s]
   end
 
   private
@@ -66,32 +67,28 @@ class Detector
     card_present = terminal['card_present'] ? 1.0 : 0.0
     km_from_home = (terminal['km_from_home'] || 0).to_f
 
-    t = parse_time(requested_at)
+    t = parse_time_fast(requested_at)
 
     if last_tx
       lt_ts = last_tx['timestamp']
-      # Fast minutes_between
-      ta = parse_time(lt_ts)
+      ta = parse_time_fast(lt_ts)
       mins = (t - ta).abs / 60.0
-      d5   = mins > @max_minutes ? 1.0 : mins / @max_minutes
-      km   = (last_tx['km_from_current'] || 0).to_f
-      d6   = km > @max_km ? 1.0 : km / @max_km
+      d5 = mins > @max_minutes ? 1.0 : mins / @max_minutes
+      km = (last_tx['km_from_current'] || 0).to_f
+      d6 = km > @max_km ? 1.0 : km / @max_km
     else
       d5 = -1.0
       d6 = -1.0
     end
 
-    d3 = t.hour / 23.0
-    d4 = ((t.wday + 6) % 7) / 6.0
-
     avg_ratio = cust_avg > 0 ? (amount / cust_avg) / @amount_vs_avg_ratio : 1.0
 
-    Numo::SFloat[
+    [
       amount > @max_amount ? 1.0 : amount / @max_amount,
       installments > @max_installments ? 1.0 : installments / @max_installments,
       avg_ratio > 1.0 ? 1.0 : (avg_ratio < 0 ? 0.0 : avg_ratio),
-      d3,
-      d4,
+      t.hour / 23.0,
+      ((t.wday + 6) % 7) / 6.0,
       d5,
       d6,
       km_from_home > @max_km ? 1.0 : km_from_home / @max_km,
@@ -104,27 +101,12 @@ class Detector
     ]
   end
 
-  def clamp(v)
-    return 0.0 if v < 0.0
-    return 1.0 if v > 1.0
-    v
-  end
-
-  def parse_time(s)
-    Time.iso8601(s).utc
+  def parse_time_fast(s)
+    return EPOCH unless s && s.length >= 19
+    # YYYY-MM-DDTHH:MM:SSZ
+    Time.utc(s[0,4].to_i, s[5,2].to_i, s[8,2].to_i, s[11,2].to_i, s[14,2].to_i, s[17,2].to_i)
   rescue
     EPOCH
   end
 
-  def minutes_between(a, b)
-    ta = Time.iso8601(a)
-    tb = Time.iso8601(b)
-    (tb - ta).abs / 60.0
-  rescue StandardError
-    @max_minutes
-  end
-
-  EPOCH       = Time.at(0).utc.freeze
-  EMPTY_HASH  = {}.freeze
-  EMPTY_ARRAY = [].freeze
 end
