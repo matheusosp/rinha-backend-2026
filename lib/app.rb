@@ -23,8 +23,7 @@ class App
     return READY_OK if method == 'GET' && path == '/ready'
 
     if method == 'POST' && path == '/fraud-score'
-      body = env['rack.input'].read
-      req  = Oj.load(body)
+      req  = Oj.load(env['rack.input'])
       approved, score = @detector.score(req)
       payload = Oj.dump({ 'approved' => approved, 'fraud_score' => score }, mode: :strict)
       return [200, JSON_HEADERS, [payload]]

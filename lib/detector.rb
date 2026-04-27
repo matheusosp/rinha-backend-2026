@@ -15,7 +15,7 @@ class Detector
   EMPTY_ARRAY = [].freeze
 
   def initialize(data_dir:)
-    norm = JSON.parse(File.read(File.join(data_dir, 'normalization.json')))
+    norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
     @max_installments    = norm.fetch('max_installments').to_f
     @amount_vs_avg_ratio = norm.fetch('amount_vs_avg_ratio').to_f
@@ -23,7 +23,11 @@ class Detector
     @max_km              = norm.fetch('max_km').to_f
     @max_tx_count_24h    = norm.fetch('max_tx_count_24h').to_f
     @max_merchant_avg    = norm.fetch('max_merchant_avg_amount').to_f
-    @mcc_risk = JSON.parse(File.read(File.join(data_dir, 'mcc_risk.json')))
+    
+    @mcc_risk = Oj.load(File.read(File.join(data_dir, 'mcc_risk.json')))
+    @mcc_risk.transform_values!(&:to_f)
+    @mcc_risk.default = 0.5
+
     cache_dir = File.join(data_dir, 'cache')
     @index, @labels_int = References.load(
       File.join(data_dir, 'references.json.gz'),
@@ -35,8 +39,7 @@ class Detector
     q = build_vector(req)
     indices, _ = @index.search_knn(q, K)
     
-    frauds = 0
-    indices.each { |idx| frauds += @labels_int[idx] }
+    frauds = @labels_int[indices].sum
     
     s = frauds.to_f / K
     [s < THRESHOLD, s]
@@ -96,7 +99,7 @@ class Detector
       is_online,
       card_present,
       known.include?(merchant_id) ? 0.0 : 1.0,
-      (@mcc_risk[merchant_mcc] || 0.5).to_f,
+      @mcc_risk[merchant_mcc],
       merchant_avg > @max_merchant_avg ? 1.0 : merchant_avg / @max_merchant_avg
     ]
   end

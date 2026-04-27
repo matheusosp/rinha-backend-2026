@@ -7,7 +7,7 @@ threads threads_count, threads_count
 preload_app!
 silence_single_worker_warning
 
-queue_requests false
+queue_requests true
 
 # Pre-warm YJIT and the BLAS path with a few synthetic requests so that the
 # first real burst from k6 doesn't pay the cold-start cost on every worker.
@@ -22,7 +22,7 @@ on_worker_boot do
       'terminal'    => { 'is_online' => true, 'card_present' => true, 'km_from_home' => 1.0 },
       'last_transaction' => nil
     }
-    200.times { detector.score(sample) }
+    1000.times { detector.score(sample) }
   rescue StandardError => e
     warn "[warmup] #{e.class}: #{e.message}"
   end
