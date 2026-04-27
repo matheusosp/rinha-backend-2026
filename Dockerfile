@@ -41,7 +41,8 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     BUNDLE_WITHOUT=development:test \
     LANG=C.UTF-8 \
     RUBY_YJIT_ENABLE=1 \
-    DATA_DIR=/app/data
+    DATA_DIR=/app/data \
+    MALLOC_ARENA_MAX=2
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends libopenblas0 liblapack3 curl && \

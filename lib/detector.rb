@@ -71,21 +71,21 @@ class Detector
   end
 
   def score(req)
-    if USE_SPINEL
-      q = @mutex.synchronize { build_vector_spinel(req) }
-      indices, _ = @index.search_knn(q, K)
-      s = @mutex.synchronize { @spinel.calculate_score(indices) }
-    else
-      q = build_vector(req)
-      indices, _ = @index.search_knn(q, K)
-      
-      frauds = 0
-      indices.each { |i| frauds += @label_bytes.getbyte(i) }
-      
-      s = frauds.to_f * INV_K
+    # Hnswlib no mesmo índice com várias threads do Puma: busca paralela costuma corromper estado / estourar tempo.
+    @mutex.synchronize do
+      if USE_SPINEL
+        q = build_vector_spinel(req)
+        indices, _ = @index.search_knn(q, K)
+        s = @spinel.calculate_score(indices)
+      else
+        q = build_vector(req)
+        indices, _ = @index.search_knn(q, K)
+        frauds = 0
+        indices.each { |i| frauds += @label_bytes.getbyte(i) }
+        s = frauds.to_f * INV_K
+      end
+      [s < THRESHOLD, s]
     end
-    
-    [s < THRESHOLD, s]
   end
 
   private
