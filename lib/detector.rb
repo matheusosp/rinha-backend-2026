@@ -4,8 +4,7 @@ require 'numo/narray'
 require 'references'
 
 # Fraud detector: builds a 14-D vector and finds the K=5 nearest neighbours
-# in the reference set. The Euclidean ranking is order-preserved by
-# r_norms - 2 * refs.dot(q), so we skip ||q||^2 entirely and avoid sqrt.
+# in the reference set using an HNSW index.
 # Score = frauds_in_topK / K; approved when score < 0.6.
 class Detector
   THRESHOLD = 0.6
@@ -24,26 +23,19 @@ class Detector
     @mcc_risk = JSON.parse(File.read(File.join(data_dir, 'mcc_risk.json')))
 
     cache_dir = File.join(data_dir, 'cache')
-    refs, r_norms, labels = References.load(
+    @index, @labels_int = References.load(
       File.join(data_dir, 'references.json.gz'),
       cache_dir
     )
-    @refs       = refs
-    @r_norms    = r_norms
-    @labels_int = labels
   end
 
   # request: parsed JSON Hash. Returns [approved (Boolean), fraud_score (Float)].
   def score(req)
     q = build_vector(req)
 
-    # scores[i] = ||r_i||^2 - 2 * r_i . q  (||q||^2 dropped — same ordering)
-    scores = @r_norms - (@refs.dot(q) * 2.0)
-
-    # Top-K via sort_index: for n=100k, Numo's sort_index is often faster than
-    # repeated min_index in Ruby because it stays in C.
-    top_k_indices = scores.sort_index[0...K]
-    frauds = @labels_int[top_k_indices].sum
+    # Fast search using HNSW
+    indices, _ = @index.knn_query(q, K)
+    frauds = @labels_int[indices].sum
 
     score = frauds.to_f / K
     [score < THRESHOLD, score]

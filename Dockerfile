@@ -22,11 +22,11 @@ RUN mkdir -p data && \
 COPY lib/ ./lib/
 COPY config.ru puma.rb ./
 
-# Pre-build the binary references cache (refs.bin / r_norms.bin / labels.bin)
+# Pre-build the HNSW index and labels cache
 # so containers boot in well under a second and skip the JSON parse.
 RUN bundle exec ruby -Ilib -e "require 'references'; \
-    refs, norms, labels = References.load('data/references.json.gz', 'data/cache'); \
-    puts \"cached \#{refs.shape[0]} vectors x \#{refs.shape[1]} dims\""
+    index, labels = References.load('data/references.json.gz', 'data/cache'); \
+    puts \"cached vectors with index\""
 
 FROM ruby:3.3.6-slim AS run
 

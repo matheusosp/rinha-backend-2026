@@ -3,16 +3,16 @@ services:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 4
+      PUMA_THREADS: 8
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
     networks: [app]
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9999/ready || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 18
-      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     deploy:
       resources:
         limits:
