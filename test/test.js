@@ -40,12 +40,6 @@ export const options = {
 };
 
 export function setup() {
-    console.log(
-        `Dataset: ${expectedStats.total} entries, `
-        + `${expectedStats.fraud_count} fraud (${expectedStats.fraud_rate}%), `
-        + `${expectedStats.legit_count} legit (${expectedStats.legit_rate}%), `
-        + `edge cases: ${expectedStats.edge_case_rate}%`
-    );
 }
 
 export default function () {
@@ -164,7 +158,6 @@ export function handleSummary(data) {
     };
 
     return {
-        'test/results.json': JSON.stringify(result, null, 2),
-        //stdout: textSummary(data, { indent: ' ', enableColors: true }),
+        stdout: JSON.stringify(result, null, 2),
     };
 }

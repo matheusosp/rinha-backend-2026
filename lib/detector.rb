@@ -27,6 +27,9 @@ class Detector
   WDAY_MUL = 1.0 / 6.0
   MINS_MUL = 1.0 / 60.0
 
+    # We can pre-calculate 1.0/60.0
+    INV_60 = 1.0 / 60.0
+
   def initialize(data_dir:)
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
@@ -77,7 +80,7 @@ class Detector
       frauds = 0
       indices.each { |i| frauds += @labels[i] }
       
-      s = frauds * INV_K
+      s = frauds.to_f * INV_K
     end
     
     [s < THRESHOLD, s]
@@ -86,42 +89,48 @@ class Detector
   private
 
   def build_vector_spinel(req)
-    tx = req['transaction'] || EMPTY_HASH
-    cust = req['customer'] || EMPTY_HASH
-    merch = req['merchant'] || EMPTY_HASH
-    term = req['terminal'] || EMPTY_HASH
+    tx = req['transaction']
+    cust = req['customer']
+    merch = req['merchant']
+    term = req['terminal']
     last_tx = req['last_transaction']
 
     t_str = tx['requested_at']
-    t = if t_str && t_str.length >= 19
-          Time.utc(t_str[0,4].to_i, t_str[5,2].to_i, t_str[8,2].to_i, t_str[11,2].to_i, t_str[14,2].to_i, t_str[17,2].to_i)
-        else
-          EPOCH
-        end
+    # Format: 2026-03-11T03:45:53Z
+    # We can use Time.utc with substring extraction which is faster than full parsing
+    t = Time.utc(t_str[0,4].to_i, t_str[5,2].to_i, t_str[8,2].to_i, t_str[11,2].to_i, t_str[14,2].to_i, t_str[17,2].to_i)
+    
+    t_to_i = t.to_i
     
     last_tx_mins = -1.0
     last_tx_km = -1.0
     if last_tx
-      ta = parse_time_fast(last_tx['timestamp'])
-      last_tx_mins = (t - ta).abs * MINS_MUL
+      ta_str = last_tx['timestamp']
+      ta_to_i = Time.utc(ta_str[0,4].to_i, ta_str[5,2].to_i, ta_str[8,2].to_i, ta_str[11,2].to_i, ta_str[14,2].to_i, ta_str[17,2].to_i).to_i
+      last_tx_mins = (t_to_i - ta_to_i).abs * INV_60
       last_tx_km = last_tx['km_from_current'].to_f
     end
 
+    known = cust['known_merchants']
+    # If it's a fraud-heavy customer, 'include?' might be slow if the list is huge.
+    # But usually it's small.
+    known_merch = (known && known.include?(merch['id']))
+
     args = [
-      tx['amount'].to_f,
-      tx['installments'].to_f,
-      cust['avg_amount'].to_f,
+      tx['amount'],
+      tx['installments'],
+      cust['avg_amount'],
       t.hour,
       t.wday,
       last_tx_mins,
       last_tx_km,
-      term['km_from_home'].to_f,
-      cust['tx_count_24h'].to_f,
+      term['km_from_home'],
+      cust['tx_count_24h'],
       !!term['is_online'],
       !!term['card_present'],
-      !!(cust['known_merchants'] && cust['known_merchants'].include?(merch['id'])),
-      merch['mcc'].to_s,
-      merch['avg_amount'].to_f
+      !!known_merch,
+      merch['mcc'],
+      merch['avg_amount']
     ]
     @spinel.build_vector(args)
   end

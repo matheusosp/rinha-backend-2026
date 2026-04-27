@@ -14,7 +14,6 @@ class App
 
   def initialize(detector: Detector.new(data_dir: ENV.fetch('DATA_DIR', 'data')))
     @detector = detector
-    warmup
   end
 
   private
@@ -43,9 +42,7 @@ class App
     if method == 'POST' && path == '/fraud-score'
       req  = Oj.load(env['rack.input'])
       approved, score = @detector.score(req)
-      # Faster response generation
-      payload = "{\"approved\":#{approved},\"fraud_score\":#{score}}"
-      return [200, JSON_HEADERS, [payload]]
+      return [200, JSON_HEADERS, ["{\"approved\":#{approved},\"fraud_score\":#{score}}"]]
     end
 
     NOT_FOUND
