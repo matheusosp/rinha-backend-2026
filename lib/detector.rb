@@ -3,6 +3,14 @@ require 'time'
 require 'numo/narray'
 require 'references'
 
+begin
+  # Tries to load the Spinel-compiled extension
+  require_relative 'spinel_detector'
+  USE_SPINEL = true
+rescue LoadError
+  USE_SPINEL = false
+end
+
 # Fraud detector: builds a 14-D vector and finds the K=11 nearest neighbours
 # in the reference set using an HNSW index.
   # Score = frauds_in_topK / K; approved when score < 0.3.
@@ -47,20 +55,76 @@ class Detector
       cache_dir
     )
     @labels = labels_numo.to_a
+
+    if USE_SPINEL
+      norm_data = [
+        @max_amount, @max_installments, @amount_vs_avg_ratio,
+        @max_minutes, @max_km, @max_tx_count_24h, @max_merchant_avg
+      ]
+      @spinel = SpinelDetector.new(@labels, @mcc_risk, norm_data)
+    end
   end
 
   def score(req)
-    q = build_vector(req)
-    indices, _ = @index.search_knn(q, K)
+    if USE_SPINEL
+      q = build_vector_spinel(req)
+      indices, _ = @index.search_knn(q, K)
+      s = @spinel.calculate_score(indices)
+    else
+      q = build_vector(req)
+      indices, _ = @index.search_knn(q, K)
+      
+      frauds = 0
+      indices.each { |i| frauds += @labels[i] }
+      
+      s = frauds * INV_K
+    end
     
-    frauds = 0
-    indices.each { |i| frauds += @labels[i] }
-    
-    s = frauds * INV_K
     [s < THRESHOLD, s]
   end
 
   private
+
+  def build_vector_spinel(req)
+    tx = req['transaction'] || EMPTY_HASH
+    cust = req['customer'] || EMPTY_HASH
+    merch = req['merchant'] || EMPTY_HASH
+    term = req['terminal'] || EMPTY_HASH
+    last_tx = req['last_transaction']
+
+    t_str = tx['requested_at']
+    t = if t_str && t_str.length >= 19
+          Time.utc(t_str[0,4].to_i, t_str[5,2].to_i, t_str[8,2].to_i, t_str[11,2].to_i, t_str[14,2].to_i, t_str[17,2].to_i)
+        else
+          EPOCH
+        end
+    
+    last_tx_mins = -1.0
+    last_tx_km = -1.0
+    if last_tx
+      ta = parse_time_fast(last_tx['timestamp'])
+      last_tx_mins = (t - ta).abs * MINS_MUL
+      last_tx_km = last_tx['km_from_current'].to_f
+    end
+
+    args = [
+      tx['amount'].to_f,
+      tx['installments'].to_f,
+      cust['avg_amount'].to_f,
+      t.hour,
+      t.wday,
+      last_tx_mins,
+      last_tx_km,
+      term['km_from_home'].to_f,
+      cust['tx_count_24h'].to_f,
+      !!term['is_online'],
+      !!term['card_present'],
+      !!(cust['known_merchants'] && cust['known_merchants'].include?(merch['id'])),
+      merch['mcc'].to_s,
+      merch['avg_amount'].to_f
+    ]
+    @spinel.build_vector(args)
+  end
 
   def build_vector(req)
     tx = req['transaction'] || EMPTY_HASH

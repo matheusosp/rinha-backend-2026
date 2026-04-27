@@ -22,6 +22,13 @@ RUN mkdir -p data && \
 COPY lib/ ./lib/
 COPY config.ru puma.rb ./
 
+# Build Spinel extension
+RUN cd lib && \
+    ruby extconf.rb && \
+    make && \
+    cp spinel_detector.so .. && \
+    cd ..
+
 # Pre-build the HNSW index and labels cache
 # so containers boot in well under a second and skip the JSON parse.
 RUN bundle exec ruby -Ilib -e "require 'references'; \
