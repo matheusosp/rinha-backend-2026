@@ -33,7 +33,7 @@ class Detector
 
   def score(req)
     q = build_vector(req)
-    indices, _ = @index.knn_query(q, K)
+    indices, _ = @index.search_knn(q, K)
     
     frauds = 0
     indices.each { |idx| frauds += @labels_int[idx] }
