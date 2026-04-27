@@ -3,16 +3,21 @@ require 'time'
 require 'numo/narray'
 require 'references'
 
-# Fraud detector: builds a 14-D vector and finds the K=5 nearest neighbours
+# Fraud detector: builds a 14-D vector and finds the K=11 nearest neighbours
 # in the reference set using an HNSW index.
-# Score = frauds_in_topK / K; approved when score < 0.6.
+  # Score = frauds_in_topK / K; approved when score < 0.3.
 class Detector
-  THRESHOLD = 0.6
-  K         = 5
+  THRESHOLD = 0.3
+  K         = 11
+  INV_K     = 1.0 / K
 
   EPOCH       = Time.at(0).utc.freeze
   EMPTY_HASH  = {}.freeze
   EMPTY_ARRAY = [].freeze
+
+  HOUR_MUL = 1.0 / 23.0
+  WDAY_MUL = 1.0 / 6.0
+  MINS_MUL = 1.0 / 60.0
 
   def initialize(data_dir:)
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
@@ -24,83 +29,94 @@ class Detector
     @max_tx_count_24h    = norm.fetch('max_tx_count_24h').to_f
     @max_merchant_avg    = norm.fetch('max_merchant_avg_amount').to_f
     
+    @inv_max_amount          = 1.0 / (@max_amount > 0 ? @max_amount : 1.0)
+    @inv_max_installments    = 1.0 / (@max_installments > 0 ? @max_installments : 1.0)
+    @inv_amount_vs_avg_ratio = 1.0 / (@amount_vs_avg_ratio > 0 ? @amount_vs_avg_ratio : 1.0)
+    @inv_max_minutes         = 1.0 / (@max_minutes > 0 ? @max_minutes : 1.0)
+    @inv_max_km              = 1.0 / (@max_km > 0 ? @max_km : 1.0)
+    @inv_max_tx_count_24h    = 1.0 / (@max_tx_count_24h > 0 ? @max_tx_count_24h : 1.0)
+    @inv_max_merchant_avg    = 1.0 / (@max_merchant_avg > 0 ? @max_merchant_avg : 1.0)
+
     @mcc_risk = Oj.load(File.read(File.join(data_dir, 'mcc_risk.json')))
     @mcc_risk.transform_values!(&:to_f)
     @mcc_risk.default = 0.5
 
     cache_dir = File.join(data_dir, 'cache')
-    @index, @labels_int = References.load(
+    @index, labels_numo = References.load(
       File.join(data_dir, 'references.json.gz'),
       cache_dir
     )
+    @labels = labels_numo.to_a
   end
 
   def score(req)
     q = build_vector(req)
     indices, _ = @index.search_knn(q, K)
     
-    frauds = @labels_int[indices].sum
+    frauds = 0
+    indices.each { |i| frauds += @labels[i] }
     
-    s = frauds.to_f / K
+    s = frauds * INV_K
     [s < THRESHOLD, s]
   end
 
   private
 
   def build_vector(req)
-    tx       = req['transaction']  || EMPTY_HASH
-    customer = req['customer']     || EMPTY_HASH
-    merchant = req['merchant']     || EMPTY_HASH
-    terminal = req['terminal']     || EMPTY_HASH
-    last_tx  = req['last_transaction']
+    tx = req['transaction'] || EMPTY_HASH
+    cust = req['customer'] || EMPTY_HASH
+    merch = req['merchant'] || EMPTY_HASH
+    term = req['terminal'] || EMPTY_HASH
+    last_tx = req['last_transaction']
 
-    amount       = (tx['amount']       || 0).to_f
-    installments = (tx['installments'] || 0).to_f
-    requested_at = tx['requested_at']
-
-    cust_avg     = (customer['avg_amount']   || 0).to_f
-    tx_count_24h = (customer['tx_count_24h'] || 0).to_f
-    known        = customer['known_merchants'] || EMPTY_ARRAY
-
-    merchant_id  = merchant['id']
-    merchant_mcc = merchant['mcc']
-    merchant_avg = (merchant['avg_amount'] || 0).to_f
-
-    is_online    = terminal['is_online']    ? 1.0 : 0.0
-    card_present = terminal['card_present'] ? 1.0 : 0.0
-    km_from_home = (terminal['km_from_home'] || 0).to_f
-
-    t = parse_time_fast(requested_at)
+    t_str = tx['requested_at']
+    t = if t_str && t_str.length >= 19
+          Time.utc(t_str[0,4].to_i, t_str[5,2].to_i, t_str[8,2].to_i, t_str[11,2].to_i, t_str[14,2].to_i, t_str[17,2].to_i)
+        else
+          EPOCH
+        end
+    
+    amount = tx['amount'].to_f
+    inst = tx['installments'].to_f
+    
+    cust_avg = cust['avg_amount'].to_f
+    avg_ratio = if cust_avg > 0
+                  (amount / cust_avg) * @inv_amount_vs_avg_ratio
+                else
+                  1.0
+                end
 
     if last_tx
-      lt_ts = last_tx['timestamp']
-      ta = parse_time_fast(lt_ts)
-      mins = (t - ta).abs / 60.0
-      d5 = mins > @max_minutes ? 1.0 : mins / @max_minutes
-      km = (last_tx['km_from_current'] || 0).to_f
-      d6 = km > @max_km ? 1.0 : km / @max_km
+      ta = parse_time_fast(last_tx['timestamp'])
+      mins = (t - ta).abs * MINS_MUL
+      d5 = mins > @max_minutes ? 1.0 : mins * @inv_max_minutes
+      km = last_tx['km_from_current'].to_f
+      d6 = km > @max_km ? 1.0 : km * @inv_max_km
     else
       d5 = -1.0
       d6 = -1.0
     end
 
-    avg_ratio = cust_avg > 0 ? (amount / cust_avg) / @amount_vs_avg_ratio : 1.0
+    km_home = term['km_from_home'].to_f
+    tx_c = cust['tx_count_24h'].to_f
+    known = cust['known_merchants']
+    mcc = merch['mcc']
 
     [
-      amount > @max_amount ? 1.0 : amount / @max_amount,
-      installments > @max_installments ? 1.0 : installments / @max_installments,
+      amount > @max_amount ? 1.0 : amount * @inv_max_amount,
+      inst > @max_installments ? 1.0 : inst * @inv_max_installments,
       avg_ratio > 1.0 ? 1.0 : (avg_ratio < 0 ? 0.0 : avg_ratio),
-      t.hour / 23.0,
-      ((t.wday + 6) % 7) / 6.0,
+      t.hour * HOUR_MUL,
+      ((t.wday + 6) % 7) * WDAY_MUL,
       d5,
       d6,
-      km_from_home > @max_km ? 1.0 : km_from_home / @max_km,
-      tx_count_24h > @max_tx_count_24h ? 1.0 : tx_count_24h / @max_tx_count_24h,
-      is_online,
-      card_present,
-      known.include?(merchant_id) ? 0.0 : 1.0,
-      @mcc_risk[merchant_mcc],
-      merchant_avg > @max_merchant_avg ? 1.0 : merchant_avg / @max_merchant_avg
+      km_home > @max_km ? 1.0 : km_home * @inv_max_km,
+      tx_c > @max_tx_count_24h ? 1.0 : tx_c * @inv_max_tx_count_24h,
+      term['is_online'] ? 1.0 : 0.0,
+      term['card_present'] ? 1.0 : 0.0,
+      (known && known.include?(merch['id'])) ? 0.0 : 1.0,
+      @mcc_risk[mcc],
+      (m_avg = merch['avg_amount'].to_f) > @max_merchant_avg ? 1.0 : m_avg * @inv_max_merchant_avg
     ]
   end
 

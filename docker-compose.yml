@@ -3,9 +3,14 @@ services:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 4
+      PUMA_THREADS: 2
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
+      RUBY_GC_HEAP_FREE_SLOTS: 1000000
+      RUBY_GC_HEAP_INIT_SLOTS: 1000000
     networks:
       - app
     healthcheck:
@@ -17,16 +22,21 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.45"
           memory: "150MB"
 
   api2:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 4
+      PUMA_THREADS: 2
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
+      OPENBLAS_NUM_THREADS: 1
+      MKL_NUM_THREADS: 1
+      OMP_NUM_THREADS: 1
+      RUBY_GC_HEAP_FREE_SLOTS: 1000000
+      RUBY_GC_HEAP_INIT_SLOTS: 1000000
     networks:
       - app
     healthcheck:
@@ -38,7 +48,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.45"
           memory: "150MB"
 
   nginx:
@@ -57,7 +67,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.20"
+          cpus: "0.10"
           memory: "50MB"
 
 networks:

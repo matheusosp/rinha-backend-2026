@@ -14,7 +14,25 @@ class App
 
   def initialize(detector: Detector.new(data_dir: ENV.fetch('DATA_DIR', 'data')))
     @detector = detector
+    warmup
   end
+
+  private
+
+  def warmup
+    sample = {
+      'transaction' => { 'amount' => 100.0, 'installments' => 1, 'requested_at' => '2026-03-11T03:45:53Z' },
+      'customer'    => { 'avg_amount' => 50.0, 'tx_count_24h' => 5, 'known_merchants' => ['MERC-001'] },
+      'merchant'    => { 'id' => 'MERC-001', 'mcc' => '5411', 'avg_amount' => 100.0 },
+      'terminal'    => { 'is_online' => true, 'card_present' => true, 'km_from_home' => 1.0 },
+      'last_transaction' => nil
+    }
+    500.times { @detector.score(sample) }
+  rescue StandardError => e
+    warn "[warmup] #{e.class}: #{e.message}"
+  end
+
+  public
 
   def call(env)
     path   = env['PATH_INFO']
@@ -25,7 +43,8 @@ class App
     if method == 'POST' && path == '/fraud-score'
       req  = Oj.load(env['rack.input'])
       approved, score = @detector.score(req)
-      payload = Oj.dump({ 'approved' => approved, 'fraud_score' => score }, mode: :strict)
+      # Faster response generation
+      payload = "{\"approved\":#{approved},\"fraud_score\":#{score}}"
       return [200, JSON_HEADERS, [payload]]
     end
 
