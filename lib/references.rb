@@ -13,14 +13,17 @@ module References
   module_function
 
   def load(json_gz_path, cache_dir)
-    index_path  = File.join(cache_dir, 'hnsw.idx')
+    m  = Integer(ENV.fetch('HNSW_M', '14'))
+    ec = Integer(ENV.fetch('HNSW_EF_CONSTRUCTION', '150'))
+    # Nome de arquivo amarra M + ef_construction: mudar HNSW_* força reindex sólido
+    index_path  = File.join(cache_dir, "hnsw_m#{m}_ec#{ec}.idx")
     labels_path = File.join(cache_dir, 'labels.bin')
 
     if File.exist?(index_path) && File.exist?(labels_path)
       labels = Numo::Int8.from_binary(File.binread(labels_path))
       index = Hnswlib::HierarchicalNSW.new(space: 'l2', dim: N_FEATURES)
       index.load_index(index_path)
-      index.set_ef(Integer(ENV.fetch('HNSW_EF', '32')))
+      index.set_ef(Integer(ENV.fetch('HNSW_EF', '36')))
       return [index, labels]
     end
 
@@ -29,8 +32,8 @@ module References
     n       = entries.size
 
     index = Hnswlib::HierarchicalNSW.new(space: 'l2', dim: N_FEATURES)
-    index.init_index(max_elements: n, m: 16, ef_construction: 200)
-    
+    index.init_index(max_elements: n, m: m, ef_construction: ec)
+
     labels = Numo::Int8.zeros(n)
 
     entries.each_with_index do |e, i|
@@ -42,7 +45,7 @@ module References
     index.save_index(index_path)
     File.binwrite(labels_path, labels.to_binary)
 
-    index.set_ef(Integer(ENV.fetch('HNSW_EF', '32')))
+    index.set_ef(Integer(ENV.fetch('HNSW_EF', '36')))
     [index, labels]
   end
 end

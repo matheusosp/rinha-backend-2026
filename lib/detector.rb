@@ -11,13 +11,11 @@ rescue LoadError
   USE_SPINEL = false
 end
 
-# Fraud detector: builds a 14-D vector and finds the K=11 nearest neighbours
-# in the reference set using an HNSW index.
-  # Score = frauds_in_topK / K; approved when score < 0.3.
+# Score = fraudes nos K vizinhos / K. Aprovado se score < threshold.
+# Peso de FN no k6 (×3) > FP (×1): ajuste fino via ENV na submissão.
 class Detector
-  THRESHOLD = 0.3
-  K         = 11
-  INV_K     = 1.0 / K
+  K     = Integer(ENV.fetch('FRAUD_K', '11'))
+  INV_K = 1.0 / K
 
   EPOCH       = Time.at(0).utc.freeze
   EMPTY_HASH  = {}.freeze
@@ -32,6 +30,7 @@ class Detector
 
   def initialize(data_dir:)
     @mutex = Mutex.new
+    @threshold = Float(ENV.fetch('FRAUD_SCORE_THRESHOLD', '0.32'))
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
     @max_installments    = norm.fetch('max_installments').to_f
@@ -84,7 +83,7 @@ class Detector
         indices.each { |i| frauds += @label_bytes.getbyte(i) }
         s = frauds.to_f * INV_K
       end
-      [s < THRESHOLD, s]
+      [s < @threshold, s]
     end
   end
 

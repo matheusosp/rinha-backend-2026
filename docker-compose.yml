@@ -6,6 +6,11 @@ services:
       PUMA_THREADS: 1
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
+      FRAUD_SCORE_THRESHOLD: "0.32"
+      FRAUD_K: "11"
+      HNSW_M: "14"
+      HNSW_EF: "36"
+      HNSW_EF_CONSTRUCTION: "150"
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       OMP_NUM_THREADS: 1
@@ -17,9 +22,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9999/ready || exit 1"]
       interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
     deploy:
       resources:
         limits:
@@ -33,6 +38,11 @@ services:
       PUMA_THREADS: 1
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
+      FRAUD_SCORE_THRESHOLD: "0.32"
+      FRAUD_K: "11"
+      HNSW_M: "14"
+      HNSW_EF: "36"
+      HNSW_EF_CONSTRUCTION: "150"
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       OMP_NUM_THREADS: 1
@@ -44,9 +54,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9999/ready || exit 1"]
       interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
     deploy:
       resources:
         limits:

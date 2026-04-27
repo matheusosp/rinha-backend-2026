@@ -57,3 +57,7 @@ build-iPhoneSimulator/
 
 # Used by RuboCop. Remote config files pulled in from inherit_from directive.
 # .rubocop-https?--*
+
+# Local k6 battery outputs (keep test/results.json as the checked-in official run)
+/test/results-run-*.json
+/test/results-stress-*.json

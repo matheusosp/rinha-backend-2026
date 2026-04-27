@@ -29,9 +29,9 @@ RUN cd lib && \
     cp spinel_detector.so .. && \
     cd ..
 
-# Pre-build the HNSW index and labels cache
-# so containers boot in well under a second and skip the JSON parse.
-RUN bundle exec ruby -Ilib -e "require 'references'; \
+# Pre-build the HNSW index and labels cache (alinhado ao run)
+ENV HNSW_M=14 HNSW_EF_CONSTRUCTION=150 HNSW_EF=36
+RUN rm -rf data/cache && bundle exec ruby -Ilib -e "require 'references'; \
     index, labels = References.load('data/references.json.gz', 'data/cache'); \
     puts \"cached vectors with index\""
 
@@ -42,7 +42,12 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     LANG=C.UTF-8 \
     RUBY_YJIT_ENABLE=1 \
     DATA_DIR=/app/data \
-    MALLOC_ARENA_MAX=2
+    MALLOC_ARENA_MAX=2 \
+    FRAUD_SCORE_THRESHOLD=0.32 \
+    FRAUD_K=11 \
+    HNSW_M=14 \
+    HNSW_EF_CONSTRUCTION=150 \
+    HNSW_EF=36
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends libopenblas0 liblapack3 curl && \
