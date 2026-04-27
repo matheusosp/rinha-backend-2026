@@ -109,7 +109,7 @@ static sp_FloatArray * sp_SpinelLogic_build_vector(sp_SpinelLogic *self, mrb_flo
     sp_FloatArray_set(lv_v, 10, (lv_card_present ? 1.0 : 0.0));
     sp_FloatArray_set(lv_v, 11, (lv_known_merch ? 0.0 : 1.0));
     lv_risk_int = sp_StrIntHash_get(self->mcc_risk, lv_mcc);
-    sp_FloatArray_set(lv_v, 12, ((lv_risk_int > 0) ? ((mrb_float)(lv_risk_int) * 0.001) : 0.5));
+    sp_FloatArray_set(lv_v, 12, (sp_StrIntHash_has_key(self->mcc_risk, lv_mcc) ? ((mrb_float)(lv_risk_int) * 0.001) : 0.5));
     sp_FloatArray_set(lv_v, 13, ((lv_m_avg > self->max_m_avg) ? 1.0 : (lv_m_avg * self->inv_max_m_avg)));
     return lv_v;
   return NULL;
