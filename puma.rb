@@ -1,10 +1,11 @@
 bind ENV.fetch('BIND', 'tcp://0.0.0.0:9999')
 
-workers Integer(ENV.fetch('WEB_CONCURRENCY', 2))
-threads_count = Integer(ENV.fetch('PUMA_THREADS', 2))
+workers Integer(ENV.fetch('WEB_CONCURRENCY', 0))
+threads_count = Integer(ENV.fetch('PUMA_THREADS', 4))
 threads threads_count, threads_count
 
 preload_app!
+silence_single_worker_warning true
 
 queue_requests false
 

@@ -40,15 +40,10 @@ class Detector
     # scores[i] = ||r_i||^2 - 2 * r_i . q  (||q||^2 dropped — same ordering)
     scores = @r_norms - (@refs.dot(q) * 2.0)
 
-    # Top-K via repeated argmin: K=5, n=100k → ~5 * O(n) BLAS-style passes,
-    # faster than sort_index() (full sort) for tiny K.
-    s = scores.dup
-    frauds = 0
-    K.times do
-      i = s.min_index
-      frauds += @labels_int[i]
-      s[i] = Float::INFINITY
-    end
+    # Top-K via sort_index: for n=100k, Numo's sort_index is often faster than
+    # repeated min_index in Ruby because it stays in C.
+    top_k_indices = scores.sort_index[0...K]
+    frauds = @labels_int[top_k_indices].sum
 
     score = frauds.to_f / K
     [score < THRESHOLD, score]
@@ -79,36 +74,41 @@ class Detector
     card_present = terminal['card_present'] ? 1.0 : 0.0
     km_from_home = (terminal['km_from_home'] || 0).to_f
 
+    t = parse_time(requested_at)
+
     if last_tx
-      mins = minutes_between(last_tx['timestamp'], requested_at)
-      d5   = clamp(mins / @max_minutes)
-      d6   = clamp((last_tx['km_from_current'] || 0).to_f / @max_km)
+      lt_ts = last_tx['timestamp']
+      # Fast minutes_between
+      ta = parse_time(lt_ts)
+      mins = (t - ta).abs / 60.0
+      d5   = mins > @max_minutes ? 1.0 : mins / @max_minutes
+      km   = (last_tx['km_from_current'] || 0).to_f
+      d6   = km > @max_km ? 1.0 : km / @max_km
     else
       d5 = -1.0
       d6 = -1.0
     end
 
-    t  = parse_time(requested_at)
     d3 = t.hour / 23.0
     d4 = ((t.wday + 6) % 7) / 6.0
 
-    avg_ratio = cust_avg.positive? ? (amount / cust_avg) / @amount_vs_avg_ratio : 1.0
+    avg_ratio = cust_avg > 0 ? (amount / cust_avg) / @amount_vs_avg_ratio : 1.0
 
     Numo::SFloat[
-      clamp(amount / @max_amount),
-      clamp(installments / @max_installments),
-      clamp(avg_ratio),
+      amount > @max_amount ? 1.0 : amount / @max_amount,
+      installments > @max_installments ? 1.0 : installments / @max_installments,
+      avg_ratio > 1.0 ? 1.0 : (avg_ratio < 0 ? 0.0 : avg_ratio),
       d3,
       d4,
       d5,
       d6,
-      clamp(km_from_home / @max_km),
-      clamp(tx_count_24h / @max_tx_count_24h),
+      km_from_home > @max_km ? 1.0 : km_from_home / @max_km,
+      tx_count_24h > @max_tx_count_24h ? 1.0 : tx_count_24h / @max_tx_count_24h,
       is_online,
       card_present,
       known.include?(merchant_id) ? 0.0 : 1.0,
       (@mcc_risk[merchant_mcc] || 0.5).to_f,
-      clamp(merchant_avg / @max_merchant_avg)
+      merchant_avg > @max_merchant_avg ? 1.0 : merchant_avg / @max_merchant_avg
     ]
   end
 
@@ -120,7 +120,7 @@ class Detector
 
   def parse_time(s)
     Time.iso8601(s).utc
-  rescue StandardError
+  rescue
     EPOCH
   end
 
