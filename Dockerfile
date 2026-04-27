@@ -6,7 +6,7 @@ ENV BUNDLE_PATH=/usr/local/bundle \
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
-      build-essential curl libopenblas-dev liblapack-dev ca-certificates && \
+      build-essential g++ curl libopenblas-dev liblapack-dev ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,17 +14,19 @@ WORKDIR /app
 COPY Gemfile Gemfile.lock* ./
 RUN bundle install --jobs 4
 
-COPY scripts/ ./scripts/
-RUN chmod +x scripts/fetch-data.sh && ./scripts/fetch-data.sh data
+RUN mkdir -p data && \
+    curl -fsSL "https://raw.githubusercontent.com/zanfranceschi/rinha-de-backend-2026/main/resources/references.json.gz" -o data/references.json.gz && \
+    curl -fsSL "https://raw.githubusercontent.com/zanfranceschi/rinha-de-backend-2026/main/resources/mcc_risk.json" -o data/mcc_risk.json && \
+    curl -fsSL "https://raw.githubusercontent.com/zanfranceschi/rinha-de-backend-2026/main/resources/normalization.json" -o data/normalization.json
 
 COPY lib/ ./lib/
 COPY config.ru puma.rb ./
 
-# Pre-warm the references cache so containers boot fast.
+# Pre-build the binary references cache (refs.bin / r_norms.bin / labels.bin)
+# so containers boot in well under a second and skip the JSON parse.
 RUN bundle exec ruby -Ilib -e "require 'references'; \
-    refs, lab = References.parse_json_gz('data/references.json.gz'); \
-    References.save_cache('data/references.cache', refs, lab); \
-    puts \"cached \#{refs.shape[0]} vectors\""
+    refs, norms, labels = References.load('data/references.json.gz', 'data/cache'); \
+    puts \"cached \#{refs.shape[0]} vectors x \#{refs.shape[1]} dims\""
 
 FROM ruby:3.3.6-slim AS run
 
@@ -35,7 +37,7 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     DATA_DIR=/app/data
 
 RUN apt-get update -qq && \
-    apt-get install -y --no-install-recommends libopenblas0 liblapack3 && \
+    apt-get install -y --no-install-recommends libopenblas0 liblapack3 curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

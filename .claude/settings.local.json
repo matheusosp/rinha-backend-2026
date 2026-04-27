@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git ls-tree *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(docker --version)",
+      "Bash(k6 version *)",
+      "Bash(bash scripts/fetch-data.sh data)",
+      "Bash(ruby -rjson -rzlib -e \"data = JSON.parse\\(Zlib::GzipReader.open\\('data/references.json.gz'\\).read\\); puts 'total:'+data.size.to_s; puts 'keys:'+data[0].keys.inspect; puts 'vec_len:'+data[0]['vector'].length.to_s; puts 'first:'+data[0].inspect[0..400]\")",
+      "Bash(ruby -v)",
+      "Bash(bundle list *)",
+      "Bash(docker compose *)",
+      "Bash(docker run --rm --cpus=0.45 --memory=150m -e DATA_DIR=/app/data rinha-2026-ruby:local bundle exec ruby -Ilib -e ' *)",
+      "Bash(docker run --rm -e DATA_DIR=/app/data rinha-2026-ruby:local bundle exec ruby --yjit -Ilib -e ' *)",
+      "Bash(docker run --rm -e DATA_DIR=/app/data rinha-2026-ruby:local bundle exec ruby -e ' *)",
+      "Bash(docker run *)"
+    ]
+  }
+}

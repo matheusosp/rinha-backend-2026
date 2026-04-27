@@ -1,48 +1,50 @@
 require 'json'
 require 'zlib'
+require 'fileutils'
 require 'numo/narray'
 
-# Loads reference vectors and labels from disk. Prefers a Marshal cache
-# to skip JSON parsing of 100k entries on every container start.
+# Loads reference vectors and labels and builds (or loads) a binary cache
+# for Numo::NArray BLAS operations. ‖r - q‖² = ‖r‖² + ‖q‖² - 2·r·q.
+# Cache avoids JSON parse + normalization (~40s) on boot.
 module References
+  N_FEATURES = 14
+
   module_function
 
-  def load(json_gz_path, cache_path)
-    if cache_path && File.exist?(cache_path) && File.mtime(cache_path) >= File.mtime(json_gz_path)
-      return load_cache(cache_path)
+  def load(json_gz_path, cache_dir)
+    refs_path   = File.join(cache_dir, 'refs.bin')
+    norms_path  = File.join(cache_dir, 'r_norms.bin')
+    labels_path = File.join(cache_dir, 'labels.bin')
+
+    if [refs_path, norms_path, labels_path].all? { |f| File.exist?(f) }
+      refs_bin = File.binread(refs_path)
+      n        = refs_bin.bytesize / (N_FEATURES * 4) # 4 bytes per SFloat
+      refs     = Numo::SFloat.from_binary(refs_bin).reshape(n, N_FEATURES)
+      norms    = Numo::SFloat.from_binary(File.binread(norms_path))
+      labels   = Numo::Int8.from_binary(File.binread(labels_path))
+      return [refs, norms, labels]
     end
 
-    refs, labels = parse_json_gz(json_gz_path)
-    save_cache(cache_path, refs, labels) if cache_path
-    [refs, labels]
-  end
-
-  def parse_json_gz(path)
-    raw = Zlib::GzipReader.open(path) { |gz| gz.read }
+    raw     = Zlib::GzipReader.open(json_gz_path) { |gz| gz.read }
     entries = JSON.parse(raw)
-    n = entries.size
+    n       = entries.size
 
-    flat = Array.new(n * 14)
-    labels = Numo::UInt8.zeros(n)
+    refs   = Numo::SFloat.zeros(n, N_FEATURES)
+    labels = Numo::Int8.zeros(n)
 
     entries.each_with_index do |e, i|
-      v = e['vector']
-      base = i * 14
-      14.times { |k| flat[base + k] = v[k] }
-      labels[i] = 1 if e['label'] == 'fraud'
+      refs[i, true] = e['vector']
+      labels[i]     = (e['label'] == 'fraud' ? 1 : 0)
     end
 
-    refs = Numo::SFloat.cast(flat).reshape(n, 14)
-    [refs, labels]
-  end
+    # r_norms = ‖r‖²
+    norms = (refs**2).sum(axis: 1)
 
-  def save_cache(path, refs, labels)
-    File.binwrite(path, Marshal.dump([refs, labels]))
-  rescue StandardError
-    # Cache is an optimization; ignore failures.
-  end
+    FileUtils.mkdir_p(cache_dir)
+    File.binwrite(refs_path,   refs.to_binary)
+    File.binwrite(norms_path,  norms.to_binary)
+    File.binwrite(labels_path, labels.to_binary)
 
-  def load_cache(path)
-    Marshal.load(File.binread(path))
+    [refs, norms, labels]
   end
 end

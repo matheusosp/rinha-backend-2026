@@ -6,4 +6,6 @@
 !README.md
 tmp
 log
-data/references.cache
+data/cache
+test/test-data.json
+test/results.json

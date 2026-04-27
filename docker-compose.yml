@@ -1,9 +1,9 @@
 services:
   api1: &api
-    build: .
+    image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
-      WEB_CONCURRENCY: 1
-      PUMA_THREADS: 4
+      WEB_CONCURRENCY: 2
+      PUMA_THREADS: 2
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
     networks: [app]

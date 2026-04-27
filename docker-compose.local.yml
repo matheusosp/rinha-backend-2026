@@ -1,0 +1,8 @@
+services:
+  api1:
+    image: rinha-2026-ruby:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+  api2:
+    image: rinha-2026-ruby:local
