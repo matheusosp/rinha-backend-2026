@@ -30,7 +30,7 @@ RUN cd lib && \
     cd ..
 
 # Pre-build the HNSW index and labels cache (alinhado ao run)
-ENV HNSW_M=14 HNSW_EF_CONSTRUCTION=150 HNSW_EF=38
+ENV HNSW_M=14 HNSW_EF_CONSTRUCTION=150 HNSW_EF=28
 RUN rm -rf data/cache && bundle exec ruby -Ilib -e "require 'references'; \
     index, labels = References.load('data/references.json.gz', 'data/cache'); \
     puts \"cached vectors with index\""
@@ -43,11 +43,13 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     RUBY_YJIT_ENABLE=1 \
     DATA_DIR=/app/data \
     MALLOC_ARENA_MAX=2 \
-    FRAUD_SCORE_THRESHOLD=0.315 \
+    WEB_CONCURRENCY=0 \
+    PUMA_THREADS=2 \
+    FRAUD_SCORE_THRESHOLD=0.32 \
     FRAUD_K=12 \
     HNSW_M=14 \
     HNSW_EF_CONSTRUCTION=150 \
-    HNSW_EF=38
+    HNSW_EF=28
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends libopenblas0 liblapack3 curl && \

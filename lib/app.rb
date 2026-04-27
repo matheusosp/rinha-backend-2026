@@ -14,6 +14,7 @@ class App
 
   def initialize(detector: Detector.new(data_dir: ENV.fetch('DATA_DIR', 'data')))
     @detector = detector
+    warmup
   end
 
   private

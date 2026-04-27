@@ -29,8 +29,7 @@ class Detector
     INV_60 = 1.0 / 60.0
 
   def initialize(data_dir:)
-    @mutex = Mutex.new
-    @threshold = Float(ENV.fetch('FRAUD_SCORE_THRESHOLD', '0.315'))
+    @threshold = Float(ENV.fetch('FRAUD_SCORE_THRESHOLD', '0.32'))
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
     @max_installments    = norm.fetch('max_installments').to_f
@@ -66,25 +65,24 @@ class Detector
         @max_minutes, @max_km, @max_tx_count_24h, @max_merchant_avg
       ]
       @spinel = SpinelDetector.new(@label_bytes, @mcc_risk, norm_data)
+      @spinel_mutex = Mutex.new
     end
   end
 
+  # Spinel (C + SP_GC) não reentrante: só build+score com mutex; HNSW no meio = paralelismo.
   def score(req)
-    # Hnswlib no mesmo índice com várias threads do Puma: busca paralela costuma corromper estado / estourar tempo.
-    @mutex.synchronize do
-      if USE_SPINEL
-        q = build_vector_spinel(req)
-        indices, _ = @index.search_knn(q, K)
-        s = @spinel.calculate_score(indices)
-      else
-        q = build_vector(req)
-        indices, _ = @index.search_knn(q, K)
-        frauds = 0
-        indices.each { |i| frauds += @label_bytes.getbyte(i) }
-        s = frauds.to_f * INV_K
-      end
-      [s < @threshold, s]
+    if USE_SPINEL
+      q = @spinel_mutex.synchronize { build_vector_spinel(req) }
+      indices, _ = @index.search_knn(q, K)
+      s = @spinel_mutex.synchronize { @spinel.calculate_score(indices) }
+    else
+      q = build_vector(req)
+      indices, _ = @index.search_knn(q, K)
+      frauds = 0
+      indices.each { |i| frauds += @label_bytes.getbyte(i) }
+      s = frauds.to_f * INV_K
     end
+    [s < @threshold, s]
   end
 
   private

@@ -63,4 +63,5 @@ build-iPhoneSimulator/
 /test/results-stress-*.json
 /test/tune/
 test/verify-*.json
+/test/bench-3000/
 docker-compose.tune-override.yml
