@@ -44,12 +44,20 @@ static VALUE spinel_init(VALUE self, VALUE labels_arr, VALUE mcc_risk_hash, VALU
 
     SP_GC_SAVE();
 
-    // Convert Ruby labels (Array of Int) to sp_IntArray
     sp_IntArray *sp_labels = sp_IntArray_new();
     SP_GC_ROOT(sp_labels);
-    long len = RARRAY_LEN(labels_arr);
-    for (long i = 0; i < len; i++) {
-        sp_IntArray_push(sp_labels, NUM2LL(rb_ary_entry(labels_arr, i)));
+    /* Numo::Int8#to_binary — um byte por rótulo (0/1), sem Array de 1M entradas em Ruby */
+    if (RB_TYPE_P(labels_arr, T_STRING)) {
+        const unsigned char *bytes = (const unsigned char *)RSTRING_PTR(labels_arr);
+        long n = RSTRING_LEN(labels_arr);
+        for (long i = 0; i < n; i++) {
+            sp_IntArray_push(sp_labels, (mrb_int)bytes[i]);
+        }
+    } else {
+        long len = RARRAY_LEN(labels_arr);
+        for (long i = 0; i < len; i++) {
+            sp_IntArray_push(sp_labels, NUM2LL(rb_ary_entry(labels_arr, i)));
+        }
     }
 
     // Convert Ruby mcc_risk (Hash String -> Float) to sp_StrIntHash (Int = Float * 1000)

@@ -58,14 +58,15 @@ class Detector
       File.join(data_dir, 'references.json.gz'),
       cache_dir
     )
-    @labels = labels_numo.to_a
+    # Int8 em binário (~1 MB) em vez de `to_a` (~1M Fixnums), que estoura 150 MB por processo.
+    @label_bytes = labels_numo.to_binary.freeze
 
     if USE_SPINEL
       norm_data = [
         @max_amount, @max_installments, @amount_vs_avg_ratio,
         @max_minutes, @max_km, @max_tx_count_24h, @max_merchant_avg
       ]
-      @spinel = SpinelDetector.new(@labels, @mcc_risk, norm_data)
+      @spinel = SpinelDetector.new(@label_bytes, @mcc_risk, norm_data)
     end
   end
 
@@ -79,7 +80,7 @@ class Detector
       indices, _ = @index.search_knn(q, K)
       
       frauds = 0
-      indices.each { |i| frauds += @labels[i] }
+      indices.each { |i| frauds += @label_bytes.getbyte(i) }
       
       s = frauds.to_f * INV_K
     end
