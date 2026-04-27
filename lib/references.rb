@@ -23,7 +23,7 @@ module References
       labels = Numo::Int8.from_binary(File.binread(labels_path))
       index = Hnswlib::HierarchicalNSW.new(space: 'l2', dim: N_FEATURES)
       index.load_index(index_path)
-      index.set_ef(Integer(ENV.fetch('HNSW_EF', '36')))
+      index.set_ef(Integer(ENV.fetch('HNSW_EF', '38')))
       return [index, labels]
     end
 
@@ -45,7 +45,7 @@ module References
     index.save_index(index_path)
     File.binwrite(labels_path, labels.to_binary)
 
-    index.set_ef(Integer(ENV.fetch('HNSW_EF', '36')))
+    index.set_ef(Integer(ENV.fetch('HNSW_EF', '38')))
     [index, labels]
   end
 end

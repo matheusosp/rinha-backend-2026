@@ -61,3 +61,6 @@ build-iPhoneSimulator/
 # Local k6 battery outputs (keep test/results.json as the checked-in official run)
 /test/results-run-*.json
 /test/results-stress-*.json
+/test/tune/
+test/verify-*.json
+docker-compose.tune-override.yml

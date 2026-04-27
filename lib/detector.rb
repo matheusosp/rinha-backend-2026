@@ -14,7 +14,7 @@ end
 # Score = fraudes nos K vizinhos / K. Aprovado se score < threshold.
 # Peso de FN no k6 (×3) > FP (×1): ajuste fino via ENV na submissão.
 class Detector
-  K     = Integer(ENV.fetch('FRAUD_K', '11'))
+  K     = Integer(ENV.fetch('FRAUD_K', '12'))
   INV_K = 1.0 / K
 
   EPOCH       = Time.at(0).utc.freeze
@@ -30,7 +30,7 @@ class Detector
 
   def initialize(data_dir:)
     @mutex = Mutex.new
-    @threshold = Float(ENV.fetch('FRAUD_SCORE_THRESHOLD', '0.32'))
+    @threshold = Float(ENV.fetch('FRAUD_SCORE_THRESHOLD', '0.315'))
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
     @max_installments    = norm.fetch('max_installments').to_f
