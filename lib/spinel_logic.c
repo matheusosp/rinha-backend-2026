@@ -136,6 +136,7 @@ static mrb_float sp_SpinelLogic_calculate_score(sp_SpinelLogic *self, sp_IntArra
 typedef struct{const char**data;mrb_int len;}sp_Argv;
 static sp_Argv sp_argv;
 
+#ifndef SPINEL_NO_MAIN
 int main(int argc,char**argv){
   sp_argv.len=argc-1;sp_argv.data=(const char**)malloc(sizeof(const char*)*(argc>1?argc-1:1));{int _i;for(_i=0;_i<sp_argv.len;_i++)sp_argv.data[_i]=sp_str_dup_external(argv[_i+1]);}
     SP_GC_SAVE();
@@ -159,3 +160,4 @@ int main(int argc,char**argv){
     sp_SpinelLogic_calculate_score(lv_obj, _t4);
   return 0;
 }
+#endif

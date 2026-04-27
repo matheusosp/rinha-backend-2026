@@ -9,3 +9,7 @@ log
 data/cache
 test/test-data.json
 test/results.json
+lib/*.o
+lib/*.so
+lib/*.def
+lib/Makefile

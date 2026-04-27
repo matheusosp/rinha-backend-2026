@@ -31,6 +31,7 @@ class Detector
     INV_60 = 1.0 / 60.0
 
   def initialize(data_dir:)
+    @mutex = Mutex.new
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
     @max_installments    = norm.fetch('max_installments').to_f
@@ -69,21 +70,23 @@ class Detector
   end
 
   def score(req)
-    if USE_SPINEL
-      q = build_vector_spinel(req)
-      indices, _ = @index.search_knn(q, K)
-      s = @spinel.calculate_score(indices)
-    else
-      q = build_vector(req)
-      indices, _ = @index.search_knn(q, K)
+    @mutex.synchronize do
+      if USE_SPINEL
+        q = build_vector_spinel(req)
+        indices, _ = @index.search_knn(q, K)
+        s = @spinel.calculate_score(indices)
+      else
+        q = build_vector(req)
+        indices, _ = @index.search_knn(q, K)
+        
+        frauds = 0
+        indices.each { |i| frauds += @labels[i] }
+        
+        s = frauds.to_f * INV_K
+      end
       
-      frauds = 0
-      indices.each { |i| frauds += @labels[i] }
-      
-      s = frauds.to_f * INV_K
+      [s < THRESHOLD, s]
     end
-    
-    [s < THRESHOLD, s]
   end
 
   private
