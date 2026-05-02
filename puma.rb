@@ -1,4 +1,4 @@
-bind ENV.fetch('BIND', 'tcp://0.0.0.0:9999')
+bind ENV.fetch('BIND', 'tcp://0.0.0.0:5000')
 
 workers Integer(ENV.fetch('WEB_CONCURRENCY', 0))
 threads_count = Integer(ENV.fetch('PUMA_THREADS', '2'))

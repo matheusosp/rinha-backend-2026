@@ -52,10 +52,10 @@ class Detector
     @mcc_risk.default = 0.5
 
     cache_dir = File.join(data_dir, 'cache')
-    @index, labels_numo = References.load(
-      File.join(data_dir, 'references.json.gz'),
-      cache_dir
-    )
+    ref_file = File.exist?(File.join(data_dir, 'references_dev.json.gz')) && ENV['RACK_ENV'] != 'production' \
+      ? File.join(data_dir, 'references_dev.json.gz') \
+      : File.join(data_dir, 'references.json.gz')
+    @index, labels_numo = References.load(ref_file, cache_dir)
     # Int8 em binário (~1 MB) em vez de `to_a` (~1M Fixnums), que estoura 150 MB por processo.
     @label_bytes = labels_numo.to_binary.freeze
 
