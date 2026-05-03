@@ -1,54 +1,55 @@
-# Rinha de Backend 2026 — Ruby
+# Rinha de Backend 2026 — Ruby/RF
 
-Solução em Ruby para o desafio [Rinha de Backend 2026](https://github.com/zanfranceschi/rinha-de-backend-2026) — detecção de fraude com busca vetorial em 14 dimensões sobre 3 milhões de referências.
+Solução em Ruby para o desafio [Rinha de Backend 2026](https://github.com/zanfranceschi/rinha-de-backend-2026) — detecção de fraude com Random Forest treinado sobre 3M vetores de referência em 14 dimensões.
 
 ## Stack
 
-- **Ruby 3.2 + YJIT** — JIT habilitado via `RUBYOPT=--yjit`
-- **Puma 6.6** — single process, 6 threads (= nproc)
-- **hnswlib** — índice HNSW aproximado sobre 3M vetores (M=16, ef_construction=200, ef=40)
-- **numo-narray** — labels em binário Int8 (~3MB em vez de ~150MB como Array Ruby)
+- **Ruby 3.3.6 + YJIT** — JIT habilitado (`RUBY_YJIT_ENABLE=1`)
+- **Puma 6.6** — single process, 6 threads local / 2 threads Docker
+- **Random Forest puro Ruby** — inferência em 26–53µs/call via YJIT
 - **oj** — JSON parsing rápido
+- **scikit-learn** (build stage apenas) — treinamento do modelo durante `docker build`
 
-## Performance (índice 3M vetores, AMD EPYC 9B14, 6 CPUs)
+## Performance (3M vetores, RF 200 árvores, YJIT)
 
 | Métrica | Valor |
 |---|---|
-| Latência P50 (sequential) | ~51ms |
-| Throughput concorrente (6 threads) | ~64 req/s |
-| Memória Puma (RSS) | ~930 MB |
-| Índice HNSW em disco | 586 MB |
-| Labels em binário | 3 MB |
+| Inferência (YJIT) | 53 µs/call |
+| Inferência em Docker (0.4 CPU) | ~0.13 ms/call |
+| P99 estimado em Docker | **< 5 ms** |
+| Memória Puma (RSS) | **53 MB** (vs 930 MB HNSW) |
+| Modelo em disco | 0.71 MB |
+| FNR (fraudes perdidas) | **0.000%** |
+| FPR (falsos positivos) | 2.60% |
 
-## Otimizações aplicadas
+## Score estimado na Rinha
 
-### YJIT
-- Ruby 3.2 JIT habilitado via `RUBYOPT=--yjit`
-- Reduz alocações e inline-caches no hot path (`build_vector`, `score`)
+| Métrica | Valor |
+|---|---|
+| FP na prova (~30K legítimos) | ~781 |
+| FN na prova (~24K fraudes) | 0 |
+| Detection score | ~973 |
+| P99 score (P99=2ms) | ~2699 |
+| **Score final estimado** | **~3672** |
+| Score anterior (HNSW) | -3624.76 |
+| **Melhoria** | **+7296 pontos** |
 
-### Threads Puma: 6
-- `PUMA_THREADS=6` (= nproc do servidor)
-- `hnswlib`'s `search_knn` é native C e libera o GVL → threads concorrem de verdade na busca (parte mais pesada do request)
-- `queue_requests false` — sem fila interna → menor latência P99 sob carga alta
+## Arquitetura
 
-### Parâmetros HNSW otimizados para 3M vetores
-| Param | Antes | Depois | Motivo |
-|---|---|---|---|
-| `HNSW_M` | 14 | 16 | Melhor conectividade em datasets grandes → recall ↑ |
-| `HNSW_EF_CONSTRUCTION` | 150 | 200 | Índice de maior qualidade (custo só no build) |
-| `HNSW_EF` | 28 | 40 | Melhor recall na query para 14 dimensões |
+O modelo é treinado em Python/sklearn durante o `docker build` (stage `build`), e o JSON do modelo é baked na imagem final. Ao iniciar o container, o puma carrega o JSON em ~100ms e já está pronto para servir.
 
-### Warmup
-- 2000 iterações (era 500) → aquece o JIT, caches do HNSW e branch-predictor da CPU
+### Startup sem treinamento (Docker)
 
-### Cache automático do índice
-- `scripts/build_cache.rb` — constrói o índice de 3M vetores e salva em `data/cache/`
-- Cache invalidado automaticamente ao mudar `HNSW_M` ou `HNSW_EF_CONSTRUCTION`
-- Após primeiro build (~44min), reinicializações subsequentes carregam do disco em segundos
+1. Container inicia
+2. `scripts/start.sh` verifica `rf_model.json` → já existe (baked na imagem)
+3. Puma inicia imediatamente (sem warmup server)
+4. Warmup interno: 2000 iterações de inferência em ~100ms
 
-### Startup com servidor warmup
-- `scripts/start.sh` — orquestra fetch de dados + build de cache + start do puma
-- `scripts/warmup_server.rb` — servidor TCP mínimo que ocupa a porta 5000 (retorna 503) enquanto o índice é construído no primeiro boot, garantindo que o processo não seja morto por timeout
+### Startup com treinamento (Replit/dev)
+
+1. `rf_model.json` não existe → inicia warmup_server na porta 5000
+2. `scripts/train_model.py` treina RF em ~110s sobre 3M vetores
+3. Puma substitui o warmup server
 
 ## Estrutura do projeto
 
@@ -56,21 +57,21 @@ Solução em Ruby para o desafio [Rinha de Backend 2026](https://github.com/zanf
 .
 ├── lib/
 │   ├── app.rb          # Rack: GET /ready, POST /fraud-score; warmup 2000x
-│   ├── detector.rb     # build_vector (14D) + search_knn + score
-│   ├── references.rb   # Carrega/constrói índice HNSW com cache em disco
-│   └── spinel_*.c      # Extensão C opcional (não compilada no Replit)
+│   ├── detector.rb     # build_vector (14D) + RF score
+│   └── rf_model.rb     # Inferência pura Ruby: traversal de árvores, YJIT-friendly
 ├── scripts/
-│   ├── start.sh        # Entrypoint: fetch → cache build → puma
-│   ├── build_cache.rb  # Constrói índice HNSW a partir de references.json.gz
-│   ├── warmup_server.rb # Servidor temporário durante o build do cache
-│   └── fetch-data.sh   # Download de references.json.gz, mcc_risk.json, normalization.json
+│   ├── start.sh          # Entrypoint: verifica modelo → treina se ausente → puma
+│   ├── train_model.py    # Python/sklearn: RF 200 trees, max_depth=8, threshold búsca
+│   └── warmup_server.rb  # Servidor temporário durante treinamento (dev)
 ├── data/
 │   ├── references.json.gz      # 3M vetores de referência (50MB gzipped)
 │   ├── mcc_risk.json
 │   ├── normalization.json
 │   └── cache/
-│       ├── hnsw_m16_ec200.idx  # Índice HNSW (586MB, M=16, ef_construction=200)
-│       └── labels.bin          # Labels Int8 binárias (3MB)
+│       └── rf_model.json       # Modelo treinado (0.71MB, 200 árvores)
+├── Dockerfile                  # Multi-stage: build(Python+sklearn) → run(ruby-slim)
+├── docker-compose.yml          # 2 instâncias + nginx, 150MB/instância
+├── docker-compose.local.yml    # Para teste local
 ├── config.ru
 └── puma.rb
 ```
@@ -80,16 +81,32 @@ Solução em Ruby para o desafio [Rinha de Backend 2026](https://github.com/zanf
 - `GET /ready` → `{"ok":true}`
 - `POST /fraud-score` → `{"approved":bool,"fraud_score":float}`
 
-## Variáveis de ambiente
+## Variáveis de ambiente (runtime)
 
-| Variável | Padrão | Descrição |
+| Variável | Padrão Docker | Descrição |
 |---|---|---|
-| `DATA_DIR` | `data` | Diretório dos dados |
-| `BIND` | `tcp://0.0.0.0:5000` | Endereço Puma |
-| `PUMA_THREADS` | `6` | Threads Puma |
-| `WEB_CONCURRENCY` | `0` | Workers Puma |
-| `FRAUD_K` | `12` | K vizinhos para scoring |
-| `FRAUD_SCORE_THRESHOLD` | `0.32` | Threshold de fraude |
-| `HNSW_M` | `16` | Parâmetro M do HNSW |
-| `HNSW_EF` | `40` | ef de busca do HNSW |
-| `HNSW_EF_CONSTRUCTION` | `200` | ef de construção do HNSW |
+| `DATA_DIR` | `/app/data` | Diretório dos dados |
+| `BIND` | `tcp://0.0.0.0:9999` | Endereço Puma (nginx upstream) |
+| `PUMA_THREADS` | `2` | Threads Puma no Docker |
+| `WEB_CONCURRENCY` | `0` | Workers Puma (single process) |
+| `MALLOC_ARENA_MAX` | `2` | Limita arenas malloc → reduz RSS |
+| `RUBY_YJIT_ENABLE` | `1` | Ativa YJIT |
+
+## Modelo RF (rf_model.json)
+
+- **200 árvores**, max_depth=8, min_samples_leaf=200
+- **class_weight={0:1, 1:3}** — penaliza 3× mais FN (fraudes perdidas), alinhado à fórmula Rinha
+- **Threshold=0.050** — otimizado na validação (20% hold-out) minimizando `3×FN + FP`
+- Treinado em 2.4M amostras (80% dos 3M), validado em 600K (20%)
+- Val: TP=199.881, TN=389.718, FP=10.401, FN=0
+
+## Decisão: RF em vez de HNSW
+
+| | HNSW (anterior) | RF (atual) |
+|---|---|---|
+| Memória RSS | 930 MB | 53 MB |
+| Cabe em 150MB/instância? | ❌ OOM | ✅ |
+| P99 | 2001ms (OOM kills) | < 5ms |
+| HTTP errors | 848 | 0 |
+| FNR | ~0.3% | 0.000% |
+| FPR | ~2.5% | 2.60% |
