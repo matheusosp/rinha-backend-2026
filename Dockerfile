@@ -52,4 +52,4 @@ COPY --from=build /app /app
 
 EXPOSE 9999
 
-CMD ["bundle", "exec", "puma", "-C", "puma.rb"]
+CMD ["bundle", "exec", "puma", "-C", "puma.rb", "config.ru"]
