@@ -25,8 +25,6 @@ COPY lib/     ./lib/
 COPY scripts/ ./scripts/
 COPY config.ru puma.rb ./
 
-# Train RF model during build — bakes rf_model.json into the image.
-# At runtime no training needed: startup is instant.
 RUN DATA_DIR=data python3 scripts/train_model.py
 
 FROM ruby:3.3.6-slim AS run
@@ -34,9 +32,11 @@ FROM ruby:3.3.6-slim AS run
 ENV BUNDLE_PATH=/usr/local/bundle \
     BUNDLE_WITHOUT=development:test \
     LANG=C.UTF-8 \
-    RUBY_YJIT_ENABLE=1 \
+    RUBYOPT=--yjit \
     DATA_DIR=/app/data \
     MALLOC_ARENA_MAX=2 \
+    RUBY_GC_HEAP_FREE_SLOTS=200000 \
+    RUBY_GC_HEAP_INIT_SLOTS=200000 \
     WEB_CONCURRENCY=0 \
     PUMA_THREADS=2 \
     BIND=tcp://0.0.0.0:9999
