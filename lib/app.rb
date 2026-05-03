@@ -27,7 +27,7 @@ class App
       'terminal'    => { 'is_online' => true, 'card_present' => true, 'km_from_home' => 1.0 },
       'last_transaction' => nil
     }
-    # 2000 iterações: aquece YJIT, caches do HNSW e branch-predictor da CPU.
+    # 2000 iterações: aquece YJIT inline-caches e branch-predictor da CPU.
     2_000.times { @detector.score(sample) }
   rescue StandardError => e
     warn "[warmup] #{e.class}: #{e.message}"
