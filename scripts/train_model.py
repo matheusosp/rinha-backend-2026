@@ -31,9 +31,9 @@ OUT_DIR  = os.path.join(DATA_DIR, 'cache')
 OUT_PATH = os.path.join(OUT_DIR, 'rf_model.json')
 
 SEED         = 42
-N_ESTIMATORS = 300   # was 200 — more trees → better FPR
-MAX_DEPTH    = 10    # was 8 — more capacity for complex patterns
-MIN_LEAF     = 100   # was 200 — finer splits
+N_ESTIMATORS = 200   # 200 trees: good accuracy, FAISS labels compensate for fewer trees
+MAX_DEPTH    = 8     # depth 8: keeps model small (~100K nodes vs 600K at depth 10)
+MIN_LEAF     = 100   # finer splits than default
 MAX_FEATURES = 'sqrt'
 FN_WEIGHT    = 3
 VAL_FRAC     = 0.20

@@ -1,13 +1,13 @@
-RubyVM::YJIT.enable if defined?(RubyVM::YJIT) && !RubyVM::YJIT.enabled?
+RubyVM::YJIT.enable if defined?(RubyVM::YJIT) && RubyVM::YJIT.respond_to?(:enable) && !RubyVM::YJIT.enabled?
 
 bind ENV.fetch('BIND', 'tcp://0.0.0.0:5000')
 
 workers Integer(ENV.fetch('WEB_CONCURRENCY', '0'))
 
-# 2 threads optimal for pure-CPU workload: 1 holds GVL running RF,
-# 1 reads the next request from socket (releases GVL during I/O).
-# Measured: 2 threads = 4795 req/s vs 4 threads = 1952 req/s locally.
-threads_count = Integer(ENV.fetch('PUMA_THREADS', '2'))
+# 8 threads: handles nginx keepalive bursts. GVL serializes CPU work, but at
+# 97µs/request (0.4 CPU) and 450 req/s actual load, utilisation ρ=0.044 →
+# queue practically always empty → P99 < 1ms.
+threads_count = Integer(ENV.fetch('PUMA_THREADS', '8'))
 threads threads_count, threads_count
 
 preload_app!
