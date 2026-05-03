@@ -1,6 +1,6 @@
 RubyVM::YJIT.enable if defined?(RubyVM::YJIT) && RubyVM::YJIT.respond_to?(:enable) && !RubyVM::YJIT.enabled?
 
-bind ENV.fetch('BIND', 'tcp://0.0.0.0:5000')
+bind ENV.fetch('BIND', 'tcp://0.0.0.0:9999')
 
 workers Integer(ENV.fetch('WEB_CONCURRENCY', '0'))
 
