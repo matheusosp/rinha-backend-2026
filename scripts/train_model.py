@@ -10,6 +10,14 @@ This script computes KNN-derived labels for 150K training samples using FAISS
 (exact brute-force on all 3M reference vectors) and trains the RF on those labels.
 The RF then directly learns where the KNN decision boundary is.
 
+Feature engineering (17D from original 14D):
+  0-13: original features (amount_norm, inst_norm, amount_ratio, hour, wday,
+        mins_since_last, km_from_last, km_home, tx_24h, is_online, card_present,
+        unknown_merch, mcc_risk, merch_avg_norm)
+  14: amount / merchant_avg ratio (normalized by 100)  -- fraud~82×, FP~9.6×
+  15: (1 - card_present) * amount_norm                 -- card-absent high-value
+  16: travel speed in km/h (normalized by 900)         -- impossible travel signal
+
 Output: data/cache/rf_model.json
 """
 import gzip, json, os, sys, time, math
@@ -23,15 +31,26 @@ OUT_DIR  = os.path.join(DATA_DIR, 'cache')
 OUT_PATH = os.path.join(OUT_DIR, 'rf_model.json')
 
 SEED         = 42
-N_ESTIMATORS = 200
-MAX_DEPTH    = 8
-MIN_LEAF     = 200
+N_ESTIMATORS = 300   # was 200 — more trees → better FPR
+MAX_DEPTH    = 10    # was 8 — more capacity for complex patterns
+MIN_LEAF     = 100   # was 200 — finer splits
 MAX_FEATURES = 'sqrt'
 FN_WEIGHT    = 3
 VAL_FRAC     = 0.20
 N_KNN        = 150_000   # vectors to compute KNN labels for
 
+# Derived-feature normalization constants (must match lib/detector.rb)
+MAX_MERCH_RATIO = 100.0
+MAX_SPEED_KMH   = 900.0
+
 t0 = time.time()
+
+# ── Load normalization constants ───────────────────────────────────────────────
+norm_data = json.load(open(os.path.join(DATA_DIR, 'normalization.json')))
+MAX_KM        = float(norm_data['max_km'])
+MAX_MINUTES   = float(norm_data['max_minutes'])
+MAX_AMOUNT    = float(norm_data['max_amount'])
+MAX_MERCH_AVG = float(norm_data['max_merchant_avg_amount'])
 
 # ── Load all reference vectors ─────────────────────────────────────────────────
 print(f"[train] loading {REF_PATH}...", flush=True)
@@ -48,13 +67,56 @@ del entries
 fraud_n = int(y.sum())
 print(f"[train] fraud={fraud_n} ({100*fraud_n/n:.1f}%)  legit={n-fraud_n}", flush=True)
 
+
+def add_derived_features(X14):
+    """Augment 14D vectors with 3 derived features → 17D.
+
+    All features are derivable from the 14D vector + normalization constants,
+    so they can be computed both at inference time (Ruby) and training time (here).
+
+    Feature 14: amount / merchant_avg ratio (normalized by MAX_MERCH_RATIO=100)
+      - Computed as X[:,0]/X[:,13] since both share the same max (the 10K cancels)
+      - Fraud ~82×, FP ~9.6×, legit ~1× → strong separator
+
+    Feature 15: (1 - card_present) * amount_norm
+      - High-value card-absent transactions are predominantly fraud
+      - FP mean = 0.089, Fraud mean = 0.468 (5× difference)
+
+    Feature 16: travel speed (km/h, normalized by MAX_SPEED_KMH=900)
+      - FP p50=157 km/h, legit p50=1.6 km/h (RF cannot directly learn km/mins ratio)
+      - Only set when last_transaction exists (feature[5] > 0 and feature[6] > 0)
+    """
+    n = len(X14)
+    extras = np.zeros((n, 3), dtype=np.float32)
+
+    # Feature 14: amount/merchant_avg ratio
+    # Both normalized by same max (10K) so ratio cancels normalization
+    merch_f = np.maximum(X14[:, 13], 1e-6)
+    extras[:, 0] = np.minimum(X14[:, 0] / (merch_f * MAX_MERCH_RATIO), 1.0)
+
+    # Feature 15: (1 - card_present) * amount_norm
+    extras[:, 1] = (1.0 - X14[:, 10]) * X14[:, 0]
+
+    # Feature 16: travel speed (km/h normalized)
+    has_last   = (X14[:, 5] > 0) & (X14[:, 6] > 0)
+    km         = X14[:, 6] * MAX_KM
+    minutes    = np.maximum(X14[:, 5] * MAX_MINUTES, 0.001)
+    speed_kmh  = km * 60.0 / minutes
+    extras[:, 2] = np.where(has_last,
+                            np.minimum(speed_kmh / MAX_SPEED_KMH, 1.0),
+                            0.0)
+
+    return np.hstack([X14, extras]).astype(np.float32)
+
+
 # ── KNN label computation ─────────────────────────────────────────────────────
 # For each of N_KNN sampled vectors, compute its exact 5-NN in the FULL 3M set
 # (leave-one-out), then assign label: fraud if fraud_count >= 3 among 5 nearest.
+# KNN uses the ORIGINAL 14D features (same as the Rinha oracle).
 print(f"[knn] sampling {N_KNN} vectors for KNN labeling...", flush=True)
 rng = np.random.default_rng(SEED)
 knn_idx = rng.choice(n, size=N_KNN, replace=False)
-X_knn   = X[knn_idx]   # (150K, 14) — queries
+X_knn   = X[knn_idx]   # (150K, 14) — queries (original 14D for KNN)
 
 knn_labels_ok = False
 
@@ -109,9 +171,15 @@ else:
     print("[train] WARNING: falling back to raw labels on full dataset", flush=True)
     X_train_data, y_train_data = X, y
 
+# ── Augment training vectors with derived features (14D → 17D) ────────────────
+print("[train] augmenting vectors: 14D → 17D "
+      "(amount/merch_ratio, no_card×amount, speed)...", flush=True)
+X_train_aug = add_derived_features(X_train_data)
+print(f"[train] feature shape: {X_train_aug.shape}", flush=True)
+
 # ── Train/validation split ────────────────────────────────────────────────────
 X_tr, X_val, y_tr, y_val = train_test_split(
-    X_train_data, y_train_data,
+    X_train_aug, y_train_data,
     test_size=VAL_FRAC, random_state=SEED, stratify=y_train_data
 )
 print(f"[train] train={len(y_tr)}  val={len(y_val)}  "
@@ -119,7 +187,7 @@ print(f"[train] train={len(y_tr)}  val={len(y_val)}  "
 
 # ── Fit Random Forest ─────────────────────────────────────────────────────────
 print(f"[train] fitting RF  n={N_ESTIMATORS}  depth={MAX_DEPTH}  "
-      f"min_leaf={MIN_LEAF}  features={MAX_FEATURES}...", flush=True)
+      f"min_leaf={MIN_LEAF}  features={MAX_FEATURES}  n_features=17...", flush=True)
 clf = RandomForestClassifier(
     n_estimators     = N_ESTIMATORS,
     max_depth        = MAX_DEPTH,
