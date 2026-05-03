@@ -14,6 +14,10 @@ class Detector
   WDAY_MUL = 1.0 / 6.0
   INV_60   = 1.0 / 60.0
 
+  # Normalization caps for derived features
+  MAX_MERCH_RATIO = 100.0   # amount/merchant_avg; fraud~82×, FP~9.6×, legit~1×
+  MAX_SPEED_KMH   = 900.0   # km/h; FP-p50=157, legit-p50=1.6
+
   def initialize(data_dir:)
     norm = Oj.load(File.read(File.join(data_dir, 'normalization.json')))
     @max_amount          = norm.fetch('max_amount').to_f
@@ -94,13 +98,37 @@ class Detector
       d6 = -1.0
     end
 
-    km_home = term['km_from_home'].to_f
-    tx_c    = cust['tx_count_24h'].to_f
-    known   = cust['known_merchants']
-    mcc     = merch['mcc']
+    km_home   = term['km_from_home'].to_f
+    tx_c      = cust['tx_count_24h'].to_f
+    known     = cust['known_merchants']
+    mcc       = merch['mcc']
+    is_onl    = term['is_online']    ? 1.0 : 0.0
+    card_p    = term['card_present'] ? 1.0 : 0.0
+    m_avg_val = merch['avg_amount'].to_f
+
+    # Base amount_norm (reused in derived features)
+    amt_norm = amount > @max_amount ? 1.0 : amount * @inv_max_amount
+
+    # Feature 14: amount / merchant_avg ratio (normalized by 100)
+    # Fraud ~82×, FP ~9.6×, legit ~1× → strong separator
+    d14 = m_avg_val > 0.0 ? [amount / (m_avg_val * MAX_MERCH_RATIO), 1.0].min : 0.0
+
+    # Feature 15: (1 - card_present) × amount_norm
+    # Card-absent high-value transactions are more likely fraud than FP
+    d15 = (1.0 - card_p) * amt_norm
+
+    # Feature 16: travel speed in km/h (normalized by 900)
+    # FP-p50=157 km/h, legit-p50=1.6 km/h — explicit ratio helps RF split
+    d16 = if last && d5 > 0.0 && d6 > 0.0
+             actual_km  = d6 * @max_km
+             actual_min = d5 * @max_minutes
+             [actual_km * 60.0 / [actual_min, 0.001].max / MAX_SPEED_KMH, 1.0].min
+           else
+             0.0
+           end
 
     [
-      amount > @max_amount ? 1.0 : amount * @inv_max_amount,
+      amt_norm,
       inst   > @max_installments ? 1.0 : inst * @inv_max_installments,
       avg_ratio > 1.0 ? 1.0 : (avg_ratio < 0 ? 0.0 : avg_ratio),
       t.hour * HOUR_MUL,
@@ -109,11 +137,14 @@ class Detector
       d6,
       km_home > @max_km ? 1.0 : km_home * @inv_max_km,
       tx_c > @max_tx_count_24h ? 1.0 : tx_c * @inv_max_tx_count_24h,
-      term['is_online']    ? 1.0 : 0.0,
-      term['card_present'] ? 1.0 : 0.0,
+      is_onl,
+      card_p,
       (known && known.include?(merch['id'])) ? 0.0 : 1.0,
       @mcc_risk[mcc],
-      (m_avg = merch['avg_amount'].to_f) > @max_merchant_avg ? 1.0 : m_avg * @inv_max_merchant_avg,
+      m_avg_val > @max_merchant_avg ? 1.0 : m_avg_val * @inv_max_merchant_avg,
+      d14,
+      d15,
+      d16,
     ]
   end
 end

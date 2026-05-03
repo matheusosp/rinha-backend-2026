@@ -9,7 +9,7 @@ RUN apt-get update -qq && \
       build-essential curl ca-certificates python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --break-system-packages --no-cache-dir scikit-learn numpy
+RUN pip3 install --break-system-packages --no-cache-dir scikit-learn numpy faiss-cpu
 
 WORKDIR /app
 
@@ -25,8 +25,6 @@ COPY lib/     ./lib/
 COPY scripts/ ./scripts/
 COPY config.ru puma.rb ./
 
-# Train RF model during build — bakes rf_model.json into the image.
-# At runtime no training needed: startup is instant.
 RUN DATA_DIR=data python3 scripts/train_model.py
 
 FROM ruby:3.3.6-slim AS run
@@ -34,11 +32,14 @@ FROM ruby:3.3.6-slim AS run
 ENV BUNDLE_PATH=/usr/local/bundle \
     BUNDLE_WITHOUT=development:test \
     LANG=C.UTF-8 \
-    RUBY_YJIT_ENABLE=1 \
+    RUBYOPT=--yjit \
     DATA_DIR=/app/data \
     MALLOC_ARENA_MAX=2 \
+    RUBY_GC_HEAP_FREE_SLOTS=2000000 \
+    RUBY_GC_HEAP_INIT_SLOTS=2000000 \
+    RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR=4 \
     WEB_CONCURRENCY=0 \
-    PUMA_THREADS=2 \
+    PUMA_THREADS=8 \
     BIND=tcp://0.0.0.0:9999
 
 RUN apt-get update -qq && \
@@ -52,4 +53,4 @@ COPY --from=build /app /app
 
 EXPOSE 9999
 
-CMD ["bundle", "exec", "puma", "-C", "puma.rb"]
+CMD ["bundle", "exec", "puma", "-C", "puma.rb", "config.ru"]
