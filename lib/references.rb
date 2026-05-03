@@ -13,9 +13,13 @@ module References
   module_function
 
   def load(json_gz_path, cache_dir)
-    m  = Integer(ENV.fetch('HNSW_M', '14'))
-    ec = Integer(ENV.fetch('HNSW_EF_CONSTRUCTION', '150'))
-    # Nome de arquivo amarra M + ef_construction: mudar HNSW_* força reindex sólido
+    # M=16: melhor conectividade para datasets grandes (3M vetores).
+    # ef_construction=200: índice de maior qualidade; custo só no build, não na busca.
+    # ef=40: melhor recall na query vs 28; impacto mínimo na latência para 14 dims.
+    m  = Integer(ENV.fetch('HNSW_M', '16'))
+    ec = Integer(ENV.fetch('HNSW_EF_CONSTRUCTION', '200'))
+
+    # Nome de arquivo amarra M + ef_construction: mudar HNSW_* força reindex automático.
     index_path  = File.join(cache_dir, "hnsw_m#{m}_ec#{ec}.idx")
     labels_path = File.join(cache_dir, 'labels.bin')
 
@@ -23,7 +27,7 @@ module References
       labels = Numo::Int8.from_binary(File.binread(labels_path))
       index = Hnswlib::HierarchicalNSW.new(space: 'l2', dim: N_FEATURES)
       index.load_index(index_path)
-      index.set_ef(Integer(ENV.fetch('HNSW_EF', '28')))
+      index.set_ef(Integer(ENV.fetch('HNSW_EF', '40')))
       return [index, labels]
     end
 
@@ -45,7 +49,7 @@ module References
     index.save_index(index_path)
     File.binwrite(labels_path, labels.to_binary)
 
-    index.set_ef(Integer(ENV.fetch('HNSW_EF', '28')))
+    index.set_ef(Integer(ENV.fetch('HNSW_EF', '40')))
     [index, labels]
   end
 end

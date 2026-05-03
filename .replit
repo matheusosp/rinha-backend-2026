@@ -27,7 +27,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bundle exec puma -C puma.rb config.ru"
+args = "bash scripts/start.sh"
 waitForPort = 5000
 
 [[ports]]
