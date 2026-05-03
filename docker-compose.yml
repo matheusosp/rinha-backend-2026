@@ -6,17 +6,9 @@ services:
       PUMA_THREADS: 2
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
-      FRAUD_SCORE_THRESHOLD: "0.32"
-      FRAUD_K: "12"
-      HNSW_M: "14"
-      HNSW_EF: "28"
-      HNSW_EF_CONSTRUCTION: "150"
-      OPENBLAS_NUM_THREADS: 1
-      MKL_NUM_THREADS: 1
-      OMP_NUM_THREADS: 1
       MALLOC_ARENA_MAX: "2"
-      RUBY_GC_HEAP_FREE_SLOTS: 1000000
-      RUBY_GC_HEAP_INIT_SLOTS: 1000000
+      RUBY_GC_HEAP_FREE_SLOTS: 500000
+      RUBY_GC_HEAP_INIT_SLOTS: 500000
     networks:
       - app
     healthcheck:
@@ -24,7 +16,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 8
-      start_period: 90s
+      start_period: 30s
     deploy:
       resources:
         limits:
@@ -38,17 +30,9 @@ services:
       PUMA_THREADS: 2
       RUBY_YJIT_ENABLE: 1
       DATA_DIR: /app/data
-      FRAUD_SCORE_THRESHOLD: "0.32"
-      FRAUD_K: "12"
-      HNSW_M: "14"
-      HNSW_EF: "28"
-      HNSW_EF_CONSTRUCTION: "150"
-      OPENBLAS_NUM_THREADS: 1
-      MKL_NUM_THREADS: 1
-      OMP_NUM_THREADS: 1
       MALLOC_ARENA_MAX: "2"
-      RUBY_GC_HEAP_FREE_SLOTS: 1000000
-      RUBY_GC_HEAP_INIT_SLOTS: 1000000
+      RUBY_GC_HEAP_FREE_SLOTS: 500000
+      RUBY_GC_HEAP_INIT_SLOTS: 500000
     networks:
       - app
     healthcheck:
@@ -56,7 +40,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 8
-      start_period: 90s
+      start_period: 30s
     deploy:
       resources:
         limits:
