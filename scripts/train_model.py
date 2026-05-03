@@ -145,6 +145,18 @@ for t in np.arange(0.005, 0.80, 0.005):
         best_cost = cost
         best_t    = round(float(t), 3)
 
+# Push threshold into the flat-minimum region (FP stays constant while FNR=0).
+# Scanning upward from best_t: accept any t that keeps cost <= best_cost.
+for t in np.arange(best_t + 0.005, 0.60, 0.005):
+    pred = (proba_val >= t).astype(np.int8)
+    fn   = int(((pred == 0) & (y_val == 1)).sum())
+    fp   = int(((pred == 1) & (y_val == 0)).sum())
+    cost = FN_WEIGHT * fn + fp
+    if cost <= best_cost:
+        best_t = round(float(t), 3)
+    else:
+        break
+
 print(f"[train] optimal threshold={best_t:.3f}  cost(3FN+FP)={best_cost}", flush=True)
 
 pred_v = (proba_val >= best_t).astype(np.int8)
