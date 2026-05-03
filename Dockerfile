@@ -9,7 +9,7 @@ RUN apt-get update -qq && \
       build-essential curl ca-certificates python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --break-system-packages --no-cache-dir scikit-learn numpy
+RUN pip3 install --break-system-packages --no-cache-dir scikit-learn numpy faiss-cpu
 
 WORKDIR /app
 
