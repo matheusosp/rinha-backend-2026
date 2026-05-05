@@ -6,10 +6,8 @@ ENV BUNDLE_PATH=/usr/local/bundle \
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \
-      build-essential curl ca-certificates python3 python3-pip && \
+      build-essential curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install --break-system-packages --no-cache-dir scikit-learn numpy faiss-cpu
 
 WORKDIR /app
 
@@ -25,7 +23,9 @@ COPY lib/     ./lib/
 COPY scripts/ ./scripts/
 COPY config.ru puma.rb ./
 
-RUN DATA_DIR=data python3 scripts/train_model.py
+RUN cd lib && ruby extconf.rb && make
+RUN DATA_DIR=data bundle exec ruby scripts/build_border_index.rb && \
+    rm -f data/references.json.gz
 
 FROM ruby:3.3.6-slim AS run
 
@@ -39,7 +39,7 @@ ENV BUNDLE_PATH=/usr/local/bundle \
     RUBY_GC_HEAP_INIT_SLOTS=2000000 \
     RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR=4 \
     WEB_CONCURRENCY=0 \
-    PUMA_THREADS=8 \
+    PUMA_THREADS=2 \
     BIND=tcp://0.0.0.0:9999
 
 RUN apt-get update -qq && \

@@ -4,10 +4,9 @@ bind ENV.fetch('BIND', 'tcp://0.0.0.0:5000')
 
 workers Integer(ENV.fetch('WEB_CONCURRENCY', '0'))
 
-# 8 threads: handles nginx keepalive bursts. GVL serializes CPU work, but at
-# 97µs/request (0.4 CPU) and 450 req/s actual load, utilisation ρ=0.044 →
-# queue practically always empty → P99 < 1ms.
-threads_count = Integer(ENV.fetch('PUMA_THREADS', '8'))
+# Two threads per API keep enough socket concurrency without adding scheduler
+# contention under the 1 CPU aggregate Rinha limit.
+threads_count = Integer(ENV.fetch('PUMA_THREADS', '2'))
 threads threads_count, threads_count
 
 preload_app!

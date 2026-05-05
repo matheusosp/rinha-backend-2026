@@ -1,15 +1,14 @@
 #!/usr/bin/env ruby
-# Delegates to the Python training script.
-# Kept for backward-compat; scripts/start.sh calls train_model.py directly now.
 
-data_dir   = ENV.fetch('DATA_DIR', 'data')
-model_path = File.join(data_dir, 'cache', 'rf_model.json')
+data_dir = ENV.fetch('DATA_DIR', 'data')
+index_path = File.join(data_dir, 'cache', 'border_index.bin')
 
-if File.exist?(model_path)
-  puts "[build_cache] RF model found (#{(File.size(model_path) / 1_048_576.0).round(2)} MB) — skipping."
+if File.exist?(index_path)
+  size = File.size(index_path) / 1_048_576.0
+  puts "[build_cache] border index found (#{size.round(2)} MB) - skipping."
   exit 0
 end
 
-puts "[build_cache] training RF model via Python..."
+puts '[build_cache] building border index with Ruby...'
 STDOUT.flush
-exec "python3 scripts/train_model.py"
+exec({ 'DATA_DIR' => data_dir }, 'bundle', 'exec', 'ruby', 'scripts/build_border_index.rb')

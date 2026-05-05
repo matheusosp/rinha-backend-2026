@@ -21,7 +21,7 @@ case "$MODE" in
       test/test.js
     echo ""
     echo "=== Results ==="
-    cat test/results.json | python3 -m json.tool 2>/dev/null || cat test/results.json
+    ruby -rjson -e 'puts JSON.pretty_generate(JSON.parse(File.read("test/results.json")))' 2>/dev/null || cat test/results.json
     ;;
   *)
     echo "Usage: $0 [smoke|load]"

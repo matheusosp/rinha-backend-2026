@@ -8,11 +8,11 @@
 # Requirements: docker buildx with linux/amd64 emulation (or native amd64)
 #
 # The build will:
-#   1. Install Python + scikit-learn in the build stage
-#   2. Download the 3M reference vectors (~50MB)
-#   3. Train the Random Forest (200 trees, ~2 min)
-#   4. Bake rf_model.json into the final ruby:slim image (~120MB)
-# Total build time: ~5-10 min. Final image: ~120 MB.
+#   1. Install Ruby build tools in the build stage
+#   2. Compile the Spinel C extension
+#   3. Download the 3M reference vectors (~50MB)
+#   4. Build a compact border_index.bin with Ruby and bake it into the image
+# Total build time: usually under a minute after Docker cache warms up.
 
 set -euo pipefail
 
