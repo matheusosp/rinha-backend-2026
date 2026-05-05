@@ -3,7 +3,7 @@ services:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 8
+      PUMA_THREADS: 2
       BIND: "tcp://0.0.0.0:9999"
       RUBYOPT: "--yjit"
       RUBY_GC_HEAP_INIT_SLOTS: 800000
@@ -29,7 +29,7 @@ services:
     image: ghcr.io/matheusosp/rinha-backend-2026:latest
     environment:
       WEB_CONCURRENCY: 0
-      PUMA_THREADS: 8
+      PUMA_THREADS: 2
       BIND: "tcp://0.0.0.0:9999"
       RUBYOPT: "--yjit"
       RUBY_GC_HEAP_INIT_SLOTS: 800000
